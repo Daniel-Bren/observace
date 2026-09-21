@@ -29,16 +29,17 @@ Validação:
 - O IBGE retornou 184 municípios
 - O TCE retornou 185 registros (Uma espécie de registro do tribunal com a sigla `T.C.M`, sem código do IBGE)
 - 184 registros do TCE correspondem aos 184 registros do IBGE.
+- O nome do município não é utilizado como chave de integração devido a diferenças de formatação entre as fontes.
 
 ## Coleta
 
 O coletor consulta os municípios disponíveis na API do TCE-CE e transforma
 os dados para o formato mínimo definido pelo ObservaCE:
 
-- código TCE
+- codigo_ibge
 - nome
-- código IBGE
-- UF
+- uf
+- codigo_tce
 
 ## Fluxo
 1. Coleta municípios do TCE.
@@ -46,3 +47,17 @@ os dados para o formato mínimo definido pelo ObservaCE:
 3. Coletar municípios do IBGE.
 4. Transformar os dados para o mesmo formato.
 5. Cruzar as duas dontes utilizando `codigo_ibge`.
+6. Gerar a lista integrada com os 184 municípios.
+7. Carregar os municípios no PostgreSQL.
+
+## Banco de dados
+Projeto utiliza PostgreSQL executado localmente
+
+A tabela municipios possui granularidade de uma linha por município.
+
+Campos:
+id: identificador interno e chave primária.
+codigo_ibge: identificador oficial do IBGE, obrigatório e único.
+nome: nome do município, obrigatório.
+uf: unidade federativa, obrigatória.
+codigo_tce: identificador utilizado pelo TCE Ceará, único e opcional.
