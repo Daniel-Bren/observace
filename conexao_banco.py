@@ -15,13 +15,13 @@ conexao = psycopg.connect(
 print("conexao realizada")
 
 cursor = conexao.cursor()
+if __name__ == "__main__":
+    cursor.execute("SELECT current_database();")
 
-cursor.execute("SELECT current_database();")
+    resultado = cursor.fetchone()
 
-resultado = cursor.fetchone()
+    print(resultado)
 
-print(resultado)
+    cursor.close()
 
-cursor.close()
-
-conexao.close()
+    conexao.close()

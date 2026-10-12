@@ -1,5 +1,5 @@
 import requests
-
+from conexao_banco import cursor, conexao
 
 url = "https://api-dados-abertos.tce.ce.gov.br/sim/balancetes_receitas_orcamentarias?codigo_municipio=057&exercicio_orcamento=202600&data_referencia_doc=202604"
 
@@ -127,6 +127,50 @@ def verificar_campos_vazios(registros):
                 return False
     return True
 
+def receber_id_municipio_BD(codigo_tce):
+    cursor.execute(
+        "SELECT id FROM municipios WHERE codigo_tce = %s",
+        (codigo_tce,)
+    )
+    resultado = cursor.fetchone()
+    if resultado is None:
+        raise ValueError(f"Municipio TCE{codigo_tce} nao encontrado")
+    return resultado[0]
+
+def inserir_receitas_BD(registro, municipio_id):
+    cursor.execute(
+        """INSERT INTO receitas (municipio_id,
+                                codigo_orgao,
+                                exercicio_orcamento,
+                                codigo_unidade_orcamentaria,
+                                codigo_rubrica,
+                                tipo_fonte,
+                                codigo_fonte,
+                                data_referencia_doc,
+                                tipo_balancete,
+                                valor_previsto,
+                                arrecadacao_mes,
+                                arrecadacao_acumulada,
+                                anulacoes_mes,
+                                anulacoes_acumuladas) 
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING;""",
+                                (
+                                    municipio_id,
+                                    registro["codigo_orgao"],
+                                    registro["exercicio_orcamento"],
+                                    registro["codigo_unidade_orcamentaria"],
+                                    registro["codigo_rubrica"],
+                                    registro["tipo_fonte"],
+                                    registro["codigo_fonte"],
+                                    registro["data_referencia_doc"],
+                                    registro["tipo_balancete"],
+                                    registro["valor_previsto"],
+                                    registro["arrecadacao_mes"],
+                                    registro["arrecadacao_acumulada"],
+                                    registro["anulacoes_mes"],
+                                    registro["anulacoes_acumuladas"],
+                                )
+    )
 
 
 
@@ -157,10 +201,23 @@ else:
                      and campos_vazios
                      )
 
-    print("Verificar vazios:", campos_vazios)
-    print("Sem valores None:", campos_preenchidos)
-    print("Registros:", len(balanco_transformado))
-    print("Chaves únicas:", (validacao_tupla))
-    print("Tipos válidos:", tipos_validos)
-    print("Escopo válido:", escopo_valido)
-    print("Dados válidos:", dados_validos)
+    codigo_tce = todos_registros[0]["codigo_municipio"]
+    municipio_id = receber_id_municipio_BD(codigo_tce)
+
+    ###print("Verificar vazios:", campos_vazios)
+    ###print("Sem valores None:", campos_preenchidos)
+    ###print("Registros:", len(balanco_transformado))
+    ###print("Chaves únicas:", (validacao_tupla))
+    ###print("Tipos válidos:", tipos_validos)
+    ###print("Escopo válido:", escopo_valido)
+    ###print("Dados válidos:", dados_validos)
+    if dados_validos:
+        try:
+            for registro in balanco_transformado:
+                inserir_receitas_BD(registro,municipio_id)
+            conexao.commit()
+            print("Carga realizada.")
+        except Exception:
+            conexao.rollback()
+            raise
+

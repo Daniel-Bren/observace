@@ -46,18 +46,29 @@ os dados para o formato mínimo definido pelo ObservaCE:
 2. Transformar os dados para o formato do ObservaCE.
 3. Coletar municípios do IBGE.
 4. Transformar os dados para o mesmo formato.
-5. Cruzar as duas dontes utilizando `codigo_ibge`.
+5. Cruzar as duas fontes utilizando `codigo_ibge`.
 6. Gerar a lista integrada com os 184 municípios.
 7. Carregar os municípios no PostgreSQL.
 
 ## Banco de dados
 Projeto utiliza PostgreSQL executado localmente
 
-A tabela municipios possui granularidade de uma linha por município.
+As tabelas possuem granularidade de uma linha por registro desde os registros dos municipios até os registros de
+receita orcamentária. Os registros fiscais são categorizados por município, exercício, orgão, unidade orçamentária,
+rúbrica, fonte e período de referência.
 
-Campos:
-id: identificador interno e chave primária.
-codigo_ibge: identificador oficial do IBGE, obrigatório e único.
-nome: nome do município, obrigatório.
-uf: unidade federativa, obrigatória.
-codigo_tce: identificador utilizado pelo TCE Ceará, único e opcional.
+Exemplo de soma da arrecadação mensal por município e período:
+
+```
+SELECT
+    m.nome,
+    r.data_referencia_doc,
+    SUM(r.arrecadacao_mes) AS arrecadacao_mensal
+FROM receitas r
+JOIN municipios m ON r.municipio_id = m.id
+GROUP BY m.nome, r.data_referencia_doc;
+```
+
+Resultado validado em Fortaleza, referência 202604, foram persistidos 434 registros fiscais.
+A arrecadacao_mes foi de R$ 1.180.460.376,93 o resultado representa a soma dos registros disponíveis, não uma
+arrecadação oficialmente conciliada.
