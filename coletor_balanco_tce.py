@@ -1,10 +1,9 @@
 import requests
 from conexao_banco import cursor, conexao
 
-url = "https://api-dados-abertos.tce.ce.gov.br/sim/balancetes_receitas_orcamentarias?codigo_municipio=057&exercicio_orcamento=202600&data_referencia_doc=202604"
+url = "https://api-dados-abertos.tce.ce.gov.br/sim/balancetes_receitas_orcamentarias"
 
-
-def buscar_balanco_orcamento():
+def buscar_balanco_orcamento(codigo_municipio, exercicio_orcamento, data_referencia_doc):
     limite = 1000
     inicio = 0
 
@@ -12,6 +11,9 @@ def buscar_balanco_orcamento():
 
     while True:
         parametros = {
+            "codigo_municipio": codigo_municipio,
+            "exercicio_orcamento": exercicio_orcamento,
+            "data_referencia_doc": data_referencia_doc,
             "$count": limite,
             "$start_index": inicio
         }
@@ -39,22 +41,22 @@ def buscar_balanco_orcamento():
 def transformar_balancete_receita(dados):
     balanco_transformado = []
 
-    for balanco in dados:
+    for receita in dados:
         dict_balanco = {
-            "codigo_municipio": balanco["codigo_municipio"],
-            "exercicio_orcamento": balanco["exercicio_orcamento"],
-            "codigo_orgao": balanco["codigo_orgao"],
-            "codigo_unidade_orcamentaria": balanco["codigo_unidade_orcamentaria"].strip(),
-            "codigo_rubrica": balanco["codigo_rubrica"],
-            "tipo_fonte": balanco["tipo_fonte"],
-            "codigo_fonte": balanco["codigo_fonte"],
-            "data_referencia_doc": balanco["data_referencia_doc"],
-            "tipo_balancete": balanco["tipo_balancete"],
-            "valor_previsto": balanco["valor_previsto_orcamento"],
-            "arrecadacao_mes": balanco["valor_arrecadacao_no_mes"],
-            "arrecadacao_acumulada": balanco["valor_arrecadacao_ate_mes"],
-            "anulacoes_mes": balanco["valor_anulacoes_no_mes"],
-            "anulacoes_acumuladas": balanco["valor_anulacoes_ate_mes"],
+            "codigo_municipio": receita["codigo_municipio"],
+            "exercicio_orcamento": receita["exercicio_orcamento"],
+            "codigo_orgao": receita["codigo_orgao"],
+            "codigo_unidade_orcamentaria": receita["codigo_unidade_orcamentaria"].strip(),
+            "codigo_rubrica": receita["codigo_rubrica"],
+            "tipo_fonte": receita["tipo_fonte"],
+            "codigo_fonte": receita["codigo_fonte"],
+            "data_referencia_doc": receita["data_referencia_doc"],
+            "tipo_balancete": receita["tipo_balancete"],
+            "valor_previsto": receita["valor_previsto_orcamento"],
+            "arrecadacao_mes": receita["valor_arrecadacao_no_mes"],
+            "arrecadacao_acumulada": receita["valor_arrecadacao_ate_mes"],
+            "anulacoes_mes": receita["valor_anulacoes_no_mes"],
+            "anulacoes_acumuladas": receita["valor_anulacoes_ate_mes"],
         }
         balanco_transformado.append(dict_balanco)
     return balanco_transformado
@@ -78,39 +80,15 @@ def validar_chaves_unicas(registros):
 
     return len(registros) == len(validar_chaves)
 
-def validar_escopo_coleta(registros):
+def validar_escopo_coleta(registros, codigo_municipio, exercicio_orcamento, data_referencia_doc):
 
     for registro in registros:
         if (
-            registro["codigo_municipio"] != "057"
-            or registro["exercicio_orcamento"] != 202600
-            or registro["data_referencia_doc"] != 202604
+            registro["codigo_municipio"] != codigo_municipio
+            or registro["exercicio_orcamento"] != exercicio_orcamento
+            or registro["data_referencia_doc"] != data_referencia_doc
         ):
             return False
-    return True
-
-def validar_tipos(registros):
-
-    tipos_esperados = {
-        "codigo_municipio": str,
-        "exercicio_orcamento": int,
-        "codigo_orgao": str,
-        "codigo_unidade_orcamentaria": str,
-        "codigo_rubrica": str,
-        "tipo_fonte": str,
-        "codigo_fonte": str,
-        "data_referencia_doc": int,
-        "tipo_balancete": str,
-        "valor_previsto": (float, int),
-        "arrecadacao_mes": (float, int),
-        "arrecadacao_acumulada": (float, int),
-        "anulacoes_mes": (float, int),
-        "anulacoes_acumuladas": (float, int),
-    }
-    for registro in registros:
-        for campo, tipo_esperado in tipos_esperados.items():
-            if not isinstance(registro[campo], tipo_esperado):
-                return False
     return True
 
 def verificar_valores_none(registros):
@@ -174,50 +152,52 @@ def inserir_receitas_BD(registro, municipio_id):
 
 
 
-todos_registros = buscar_balanco_orcamento()
-if not todos_registros:
-    print("Nenhum registro encontrado")
-else:
-    balanco_transformado = transformar_balancete_receita(todos_registros)
+if __name__ == "__main__":
 
-    validacao_tupla = validar_chaves_unicas(balanco_transformado)
+    todos_registros = buscar_balanco_orcamento("057", 202600, 202604)
+    if not todos_registros:
+        print("Nenhum registro encontrado")
+    else:
+        balanco_transformado = transformar_balancete_receita(todos_registros)
 
-    escopo_valido = validar_escopo_coleta(balanco_transformado)
+        validacao_tupla = validar_chaves_unicas(balanco_transformado)
 
-    tipos_validos = validar_tipos(balanco_transformado)
-
-    campos_preenchidos = verificar_valores_none(
-        balanco_transformado
+        # ALTERAÇÃO 3: passar os parâmetros para a validação
+        escopo_valido = validar_escopo_coleta(
+            balanco_transformado, "057", 202600, 202604
         )
 
-    campos_vazios = verificar_campos_vazios(
-        balanco_transformado
-        )
 
-    dados_validos = (tipos_validos
-                     and escopo_valido
-                     and validacao_tupla
-                     and campos_preenchidos
-                     and campos_vazios
-                     )
+        campos_preenchidos = verificar_valores_none(
+            balanco_transformado
+            )
 
-    codigo_tce = todos_registros[0]["codigo_municipio"]
-    municipio_id = receber_id_municipio_BD(codigo_tce)
+        campos_vazios = verificar_campos_vazios(
+            balanco_transformado
+            )
 
-    ###print("Verificar vazios:", campos_vazios)
-    ###print("Sem valores None:", campos_preenchidos)
-    ###print("Registros:", len(balanco_transformado))
-    ###print("Chaves únicas:", (validacao_tupla))
-    ###print("Tipos válidos:", tipos_validos)
-    ###print("Escopo válido:", escopo_valido)
-    ###print("Dados válidos:", dados_validos)
-    if dados_validos:
-        try:
-            for registro in balanco_transformado:
-                inserir_receitas_BD(registro,municipio_id)
-            conexao.commit()
-            print("Carga realizada.")
-        except Exception:
-            conexao.rollback()
-            raise
+        dados_validos = (
+                          escopo_valido
+                         and validacao_tupla
+                         and campos_preenchidos
+                         and campos_vazios
+                         )
 
+        codigo_tce = todos_registros[0]["codigo_municipio"]
+        municipio_id = receber_id_municipio_BD(codigo_tce)
+
+        ###print("Verificar vazios:", campos_vazios)
+        ###print("Sem valores None:", campos_preenchidos)
+        ###print("Registros:", len(balanco_transformado))
+        ###print("Chaves únicas:", (validacao_tupla))
+        ###print("Escopo válido:", escopo_valido)
+        ###print("Dados válidos:", dados_validos)
+        if dados_validos:
+            try:
+                for registro in balanco_transformado:
+                    inserir_receitas_BD(registro,municipio_id)
+                conexao.commit()
+                print("Carga realizada.")
+            except Exception:
+                conexao.rollback()
+                raise
