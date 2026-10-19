@@ -183,14 +183,17 @@ def carregar_despesas(codigo_municipio, exercicio_orcamento, data_referencia_doc
     dados = buscar_despesas(codigo_municipio, exercicio_orcamento, data_referencia_doc)
 
     if not dados:
-        raise ValueError("Cooleta sem registros. carga interrompida.")
+        raise ValueError("Coleta sem registros. Carga interrompida.")
 
     registros = transformar_balancete_despesa(dados)
     registros = preparar_despesas(registros)
 
-    municipio_id = receber_id_municipio_BD(codigo_municipio)
+    if not validar_escopo_coleta(registros, codigo_municipio, exercicio_orcamento, data_referencia_doc):
+        raise ValueError("Dados, municipio ou periodo solicitado estao incorretos ou divergentes.")
 
     try:
+        municipio_id = receber_id_municipio_BD(codigo_municipio)
+
         for registro in registros:
             inserir_despesa_BD(registro, municipio_id)
 
@@ -200,12 +203,6 @@ def carregar_despesas(codigo_municipio, exercicio_orcamento, data_referencia_doc
     except Exception:
         conexao.rollback()
         raise
-
-    if not validar_escopo_coleta(registros, codigo_municipio, exercicio_orcamento, data_referencia_doc):
-        raise ValueError("Dados, municipio ou periodo solicitado estao incorretos ou divergentes.")
-
-    print("Registros recebidos:", len(dados))
-    print("Registros após preparação:", len(registros))
 
 if __name__ == "__main__":
     carregar_despesas("057", 202600, 202604)

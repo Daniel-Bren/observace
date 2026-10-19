@@ -150,54 +150,53 @@ def inserir_receitas_BD(registro, municipio_id):
                                 )
     )
 
+def carregar_receitas(codigo_municipio, exercicio_orcamento, data_referencia_doc):
+    todos_registros = buscar_balanco_orcamento(
+        codigo_municipio,
+        exercicio_orcamento,
+        data_referencia_doc
+    )
+
+    if not todos_registros:
+        raise ValueError("Coleta sem registros. Carga interrompida.")
+
+    balanco_transformado = transformar_balancete_receita(todos_registros)
+
+    validacao_tupla = validar_chaves_unicas(balanco_transformado)
+
+    escopo_valido = validar_escopo_coleta(
+        balanco_transformado,
+        codigo_municipio,
+        exercicio_orcamento,
+        data_referencia_doc
+    )
+
+    campos_preenchidos = verificar_valores_none(balanco_transformado)
+    campos_vazios = verificar_campos_vazios(balanco_transformado)
+
+    dados_validos = (
+        escopo_valido
+        and validacao_tupla
+        and campos_preenchidos
+        and campos_vazios
+    )
+
+    if not dados_validos:
+        raise ValueError("Validação das receitas falhou. Carga interrompida.")
+
+    try:
+        municipio_id = receber_id_municipio_BD(codigo_municipio)
+
+        for registro in balanco_transformado:
+            inserir_receitas_BD(registro, municipio_id)
+
+        conexao.commit()
+        print(f"Carga de receitas concluída: {len(balanco_transformado)} registros.")
+
+    except Exception:
+        conexao.rollback()
+        raise
 
 
 if __name__ == "__main__":
-
-    todos_registros = buscar_balanco_orcamento("057", 202600, 202604)
-    if not todos_registros:
-        print("Nenhum registro encontrado")
-    else:
-        balanco_transformado = transformar_balancete_receita(todos_registros)
-
-        validacao_tupla = validar_chaves_unicas(balanco_transformado)
-
-        # ALTERAÇÃO 3: passar os parâmetros para a validação
-        escopo_valido = validar_escopo_coleta(
-            balanco_transformado, "057", 202600, 202604
-        )
-
-
-        campos_preenchidos = verificar_valores_none(
-            balanco_transformado
-            )
-
-        campos_vazios = verificar_campos_vazios(
-            balanco_transformado
-            )
-
-        dados_validos = (
-                          escopo_valido
-                         and validacao_tupla
-                         and campos_preenchidos
-                         and campos_vazios
-                         )
-
-        codigo_tce = todos_registros[0]["codigo_municipio"]
-        municipio_id = receber_id_municipio_BD(codigo_tce)
-
-        ###print("Verificar vazios:", campos_vazios)
-        ###print("Sem valores None:", campos_preenchidos)
-        ###print("Registros:", len(balanco_transformado))
-        ###print("Chaves únicas:", (validacao_tupla))
-        ###print("Escopo válido:", escopo_valido)
-        ###print("Dados válidos:", dados_validos)
-        if dados_validos:
-            try:
-                for registro in balanco_transformado:
-                    inserir_receitas_BD(registro,municipio_id)
-                conexao.commit()
-                print("Carga realizada.")
-            except Exception:
-                conexao.rollback()
-                raise
+    carregar_receitas("057", 202600, 202604)
