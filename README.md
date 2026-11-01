@@ -72,3 +72,27 @@ GROUP BY m.nome, r.data_referencia_doc;
 Resultado validado em Fortaleza, referência 202604, foram persistidos 434 registros fiscais.
 A arrecadacao_mes foi de R$ 1.180.460.376,93 o resultado representa a soma dos registros disponíveis, não uma
 arrecadação oficialmente conciliada.
+
+## Ambiente de desenvolvimento com Docker Compose
+
+### Pré-requisitos
+
+- Docker Engine: responsável por criar e executar os containers.
+- Docker Compose: interpreta o arquivo `compose.yaml` e coordena os serviços do ambiente.
+
+### Como funciona
+
+O Dockerfile define como construir a imagem do pipeline ETL em Python.
+
+O compose.yaml define como o ETL e o PostgreSQL funcionam juntos, como configurações e armazenamento.
+Dessa forma, podemos reproduzir o ambiente de desenvolvimento.
+
+Para gerenciar o ambiente docker voce deve Iniciar o Postgres: `docker compose up -d db`
+
+Verificar os serviços: `docker compose ps`
+
+Executar o pipeline fiscal: `docker compose run --rm etl`
+
+Encerrar o ambiente preservando os dados: `docker compose down`
+
+

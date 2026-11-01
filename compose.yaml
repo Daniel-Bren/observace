@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: observace_teste
+      POSTGRES_USER: observace_teste
+      POSTGRES_PASSWORD: ${POSTGRES_TEST_PASSWORD:?Defina POSTGRES_TEST_PASSWORD}
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U observace_teste -d observace_teste" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - dados_postgres:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+  etl:
+    build: .
+    depends_on:
+       db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: observace_teste
+      DB_USER: observace_teste
+      DB_PASSWORD: ${POSTGRES_TEST_PASSWORD:?Defina POSTGRES_TEST_PASSWORD}
+
+volumes:
+  dados_postgres:
