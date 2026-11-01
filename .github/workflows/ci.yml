@@ -1,0 +1,25 @@
+name: CI - ObservaCE
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar codigo do repo
+        uses: actions/checkout@v4
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar dependencias
+        run: python -m pip install -r requirements.txt
+      - name: Validar sintaxe Python
+        run: python -m compileall -q .
+      - name: Validar importacoes
+        run: python -c "import requests, psycopg, dotenv; print('Importacoes OK')"
