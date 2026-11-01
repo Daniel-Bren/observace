@@ -22,4 +22,4 @@ jobs:
       - name: Validar sintaxe Python
         run: python -m compileall -q .
       - name: Validar importacoes
-        run: python -c "import requests, psycopg, dotenv; print('Importacoes OK')"
+        run: python -c "import biblioteca_que_nao_existe_observace"
