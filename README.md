@@ -95,4 +95,7 @@ Executar o pipeline fiscal: `docker compose run --rm etl`
 
 Encerrar o ambiente preservando os dados: `docker compose down`
 
+### Backup e recuperacao - PostgreSQL
+Utilizei o pg_dump para gerar backups logicos do PostgreSQL, no formato -Fc
+
 
