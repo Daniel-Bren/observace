@@ -13,7 +13,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-municipios = ["002", "057"]
+municipios = ["002", "057", "074", "084", "094", "162","164", "167"]
 exercicio_orcamento = 202600
 data_referencia_doc = 202604
 
