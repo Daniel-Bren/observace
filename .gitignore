@@ -3,7 +3,9 @@
 __pycache__/
 *.pyc
 .env
+.env.neon
 docs/
 backups/
-# Logs operacionais
 *.log
+.env.*
+!.env.example

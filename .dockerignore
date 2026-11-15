@@ -9,3 +9,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .idea/
+# Dados e arquivos operacionais locais
+backups/
+docs/
+*.log
