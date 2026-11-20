@@ -1,5 +1,6 @@
 import requests
 from conexao_banco import cursor, conexao
+from cliente_tce import consultar_tce
 
 url = "https://api-dados-abertos.tce.ce.gov.br/sim/balancetes_receitas_orcamentarias"
 
@@ -18,10 +19,8 @@ def buscar_balanco_orcamento(codigo_municipio, exercicio_orcamento, data_referen
             "$start_index": inicio
         }
 
-        response = requests.get(url, params=parametros)
-        response.raise_for_status()
+        dados = consultar_tce(url, parametros)
 
-        dados = response.json()
         pagina = dados["elements"]
 
         # Adiciona os registros da página à lista principal

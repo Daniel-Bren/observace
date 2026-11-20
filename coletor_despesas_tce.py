@@ -1,5 +1,5 @@
 import requests
-
+from cliente_tce import consultar_tce
 
 url = "https://api-dados-abertos.tce.ce.gov.br/sim/balancetes_despesas_orcamentarias"
 
@@ -19,10 +19,8 @@ def buscar_despesas(codigo_municipio, exercicio_orcamento, data_referencia_doc):
             "$start_index":inicio
         }
 
-        response = requests.get(url, params=parametros)
-        response.raise_for_status()
+        dados = consultar_tce(url, parametros)
 
-        dados = response.json()
         pagina = dados.get("elements")
 
         if not isinstance(pagina, list):
