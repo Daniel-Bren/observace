@@ -2,6 +2,7 @@
 import sys
 import time
 import logging
+import os
 
 from coletor_balanco_tce import carregar_receitas
 from carregar_despesas_tce import carregar_despesas
@@ -17,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 exercicio_orcamento = 202600
 data_referencia_doc = 202604
+
+TAMANHO_LOTE = 20
 
 
 def obter_municipios():
@@ -39,28 +42,53 @@ def executar_pipeline():
     falhas = []
 
     try:
-        municipios = obter_municipios()
+        todos_municipios = obter_municipios()
 
-        if len(municipios) != 184 or len(set(municipios)) != 184:
+        if (
+            len(todos_municipios) != 184
+            or len(set(todos_municipios)) != 184
+        ):
             raise ValueError(
                 f"Esperados 184 municípios únicos; "
-                f"encontrados {len(municipios)} registros "
-                f"e {len(set(municipios))} códigos únicos."
+                f"encontrados {len(todos_municipios)} registros "
+                f"e {len(set(todos_municipios))} códigos únicos."
             )
 
+        total_lotes = (
+            len(todos_municipios) + TAMANHO_LOTE - 1
+        ) // TAMANHO_LOTE
+
+        lote = int(os.environ["LOTE"])
+
+        if not 0 <= lote < total_lotes:
+            raise ValueError(
+                f"Lote inválido: {lote}. "
+                f"Valores permitidos: 0 a {total_lotes - 1}."
+            )
+
+        inicio = lote * TAMANHO_LOTE
+        municipios = todos_municipios[
+            inicio:inicio + TAMANHO_LOTE
+        ]
+
     except Exception:
-        logger.exception("FALHA | preparação da carga estadual")
+        logger.exception("FALHA | preparação do lote")
+
         try:
             conexao.rollback()
         except Exception:
             logger.exception("FALHA_ROLLBACK | preparação")
+
         return 1
 
     logger.info(
-        "INICIO_CARGA | municipios=%s | fluxos=%s | "
+        "INICIO_LOTE | lote=%s | total_lotes=%s | "
+        "municipios=%s | codigos=%s | "
         "exercicio=%s | referencia=%s",
+        lote,
+        total_lotes,
         len(municipios),
-        len(municipios) * 2,
+        municipios,
         exercicio_orcamento,
         data_referencia_doc
     )
@@ -70,12 +98,13 @@ def executar_pipeline():
             ("receitas", carregar_receitas),
             ("despesas", carregar_despesas)
         ]:
-            inicio = time.perf_counter()
+            inicio_fluxo = time.perf_counter()
 
             try:
                 logger.info(
-                    "INICIO | fluxo=%s | municipio=%s | "
-                    "exercicio=%s | referencia=%s",
+                    "INICIO | lote=%s | fluxo=%s | "
+                    "municipio=%s | exercicio=%s | referencia=%s",
+                    lote,
                     tipo,
                     municipio,
                     exercicio_orcamento,
@@ -91,32 +120,36 @@ def executar_pipeline():
                 sucessos += 1
 
                 logger.info(
-                    "SUCESSO | fluxo=%s | municipio=%s | "
-                    "duracao_s=%.2f",
+                    "SUCESSO | lote=%s | fluxo=%s | "
+                    "municipio=%s | duracao_s=%.2f",
+                    lote,
                     tipo,
                     municipio,
-                    time.perf_counter() - inicio
+                    time.perf_counter() - inicio_fluxo
                 )
 
             except Exception:
                 falhas.append((municipio, tipo))
 
                 logger.exception(
-                    "FALHA | fluxo=%s | municipio=%s | "
-                    "exercicio=%s | referencia=%s | "
-                    "duracao_s=%.2f",
+                    "FALHA | lote=%s | fluxo=%s | "
+                    "municipio=%s | exercicio=%s | "
+                    "referencia=%s | duracao_s=%.2f",
+                    lote,
                     tipo,
                     municipio,
                     exercicio_orcamento,
                     data_referencia_doc,
-                    time.perf_counter() - inicio
+                    time.perf_counter() - inicio_fluxo
                 )
 
                 try:
                     conexao.rollback()
                 except Exception:
                     logger.exception(
-                        "FALHA_ROLLBACK | fluxo=%s | municipio=%s",
+                        "FALHA_ROLLBACK | lote=%s | "
+                        "fluxo=%s | municipio=%s",
+                        lote,
                         tipo,
                         municipio
                     )
@@ -128,9 +161,11 @@ def executar_pipeline():
     })
 
     logger.info(
-        "RESUMO | municipios=%s | fluxos_previstos=%s | "
-        "sucessos=%s | falhas=%s | "
-        "municipios_com_falha=%s | duracao_total_s=%.2f",
+        "RESUMO_LOTE | lote=%s | municipios=%s | "
+        "fluxos_previstos=%s | sucessos=%s | "
+        "falhas=%s | municipios_com_falha=%s | "
+        "duracao_total_s=%.2f",
+        lote,
         len(municipios),
         len(municipios) * 2,
         sucessos,
@@ -141,7 +176,8 @@ def executar_pipeline():
 
     if falhas:
         logger.error(
-            "PENDENCIAS_REPROCESSAMENTO | %s",
+            "PENDENCIAS_REPROCESSAMENTO | lote=%s | %s",
+            lote,
             falhas
         )
 
