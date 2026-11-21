@@ -1,3 +1,4 @@
+
 name: Orquestrar lotes fiscais
 
 on:
@@ -7,9 +8,21 @@ permissions:
   id-token: write
   contents: read
 
+concurrency:
+  group: observace-etl-estadual
+  cancel-in-progress: false
+
 jobs:
-  validar-acesso:
+  executar-lotes:
     runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    env:
+      JOB: job-observace-etl
+      RG: rg-observace
+      PRIMEIRO_LOTE: "11"
+      ULTIMO_LOTE: "17"
+      MAX_TENTATIVAS: "3"
 
     steps:
       - name: Autenticar no Azure via OIDC
@@ -19,10 +32,178 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Verificar acesso ao Job
+      - name: Executar lotes
+        shell: bash
         run: |
+          set -euo pipefail
+
+          BASE="$RUNNER_TEMP/job-base.json"
+          TEMPLATE="$RUNNER_TEMP/job-execucao.yaml"
+          RESULTADOS="$RUNNER_TEMP/resultados.tsv"
+
+          : > "$RESULTADOS"
+
+          # Obter o template original, preservando as
+          # variáveis, os recursos e as referências a segredos.
           az containerapp job show \
-            --name job-observace-etl \
-            --resource-group rg-observace \
-            --query "{nome:name,imagem:properties.template.containers[0].image}" \
-            --output json
+            --name "$JOB" \
+            --resource-group "$RG" \
+            --query "properties.template" \
+            --output json > "$BASE"
+
+          # Validar o template sem imprimir credenciais.
+          jq -e '
+            (.containers | length) == 1
+            and (.containers[0].image | length > 0)
+            and (.containers[0].resources != null)
+            and (
+              [
+                .containers[0].env[].name
+              ] | (
+                index("DB_HOST") != null
+                and index("DB_PORT") != null
+                and index("DB_NAME") != null
+                and index("DB_USER") != null
+                and index("DB_PASSWORD") != null
+                and index("PGSSLMODE") != null
+                and index("LOTE") != null
+              )
+            )
+            and (
+              .containers[0].env[]
+              | select(.name == "DB_PASSWORD")
+              | .secretRef == "db-password"
+            )
+          ' "$BASE" > /dev/null
+
+          echo "Template e referência ao segredo validados."
+
+          for lote in $(seq "$PRIMEIRO_LOTE" "$ULTIMO_LOTE"); do
+            echo "::group::Lote $lote"
+
+            # JSON também é YAML válido.
+            # Alterar apenas LOTE no template temporário.
+            jq --arg lote "$lote" '
+              (
+                .containers[0].env[]
+                | select(.name == "LOTE")
+              ) |= (
+                .value = $lote
+                | del(.secretRef)
+              )
+            ' "$BASE" > "$TEMPLATE"
+
+            resultado="PENDENTE"
+
+            for tentativa in $(seq 1 "$MAX_TENTATIVAS"); do
+              echo "Lote $lote - tentativa $tentativa/$MAX_TENTATIVAS"
+
+              # Não iniciar outra execução se não for possível
+              # confirmar o identificador da execução atual.
+              if ! execucao=$(az containerapp job start \
+                --name "$JOB" \
+                --resource-group "$RG" \
+                --yaml "$TEMPLATE" \
+                --query "name" \
+                --output tsv); then
+                echo "::error::Falha ao iniciar lote $lote."
+                printf '%s\t%s\n' "$lote" "INDETERMINADO" \
+                  >> "$RESULTADOS"
+                exit 1
+              fi
+
+              if [[ -z "$execucao" ]]; then
+                echo "::error::Execução sem identificador."
+                printf '%s\t%s\n' "$lote" "INDETERMINADO" \
+                  >> "$RESULTADOS"
+                exit 1
+              fi
+
+              echo "Execução Azure: $execucao"
+
+              status="Desconhecido"
+
+              # Até 40 verificações com intervalo de 25 segundos.
+              # O Job possui timeout próprio de 900 segundos.
+              for verificacao in $(seq 1 40); do
+                if ! status=$(az containerapp job execution show \
+                  --name "$JOB" \
+                  --resource-group "$RG" \
+                  --job-execution-name "$execucao" \
+                  --query "properties.status" \
+                  --output tsv); then
+                  echo "::error::Não foi possível consultar $execucao."
+                  printf '%s\t%s\n' "$lote" "INDETERMINADO" \
+                    >> "$RESULTADOS"
+                  exit 1
+                fi
+
+                echo "Lote=$lote tentativa=$tentativa status=$status"
+
+                case "$status" in
+                  Succeeded|Failed)
+                    break
+                    ;;
+                  Running|Pending|Processing|"")
+                    ;;
+                  *)
+                    echo "::error::Status inesperado: $status"
+                    printf '%s\t%s\n' "$lote" "INDETERMINADO" \
+                      >> "$RESULTADOS"
+                    exit 1
+                    ;;
+                esac
+
+                sleep 25
+              done
+
+              if [[ "$status" == "Succeeded" ]]; then
+                resultado="SUCESSO"
+                break
+              elif [[ "$status" == "Failed" ]]; then
+                resultado="FALHA"
+                echo "Execução falhou. Fluxos já concluídos serão ignorados."
+              else
+                echo "::error::Encerramento não confirmado: $execucao"
+                printf '%s\t%s\n' "$lote" "INDETERMINADO" \
+                  >> "$RESULTADOS"
+                exit 1
+              fi
+            done
+
+            printf '%s\t%s\n' "$lote" "$resultado" >> "$RESULTADOS"
+            echo "Resultado final do lote $lote: $resultado"
+            echo "::endgroup::"
+          done
+
+          if grep -qv $'\tSUCESSO$' "$RESULTADOS"; then
+            echo "::error::Existem lotes com falhas pendentes."
+            exit 1
+          fi
+
+          echo "Todos os lotes foram concluídos com sucesso."
+
+      - name: Publicar relatório da execução
+        if: always()
+        shell: bash
+        run: |
+          RESULTADOS="$RUNNER_TEMP/resultados.tsv"
+
+          {
+            echo "## ObservaCE - Execução estadual"
+            echo
+            echo "| Lote | Resultado |"
+            echo "|---|---|"
+
+            if [[ -f "$RESULTADOS" ]]; then
+              while IFS=$'\t' read -r lote resultado; do
+                echo "| $lote | $resultado |"
+              done < "$RESULTADOS"
+            else
+              echo "| - | Execução não iniciada |"
+            fi
+
+            echo
+            echo "Resultados operacionais do Azure."
+            echo "A cobertura final deve ser validada no Neon."
+          } >> "$GITHUB_STEP_SUMMARY"
