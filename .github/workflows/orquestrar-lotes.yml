@@ -1,0 +1,28 @@
+name: Orquestrar lotes fiscais
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  validar-acesso:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Autenticar no Azure via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verificar acesso ao Job
+        run: |
+          az containerapp job show \
+            --name job-observace-etl \
+            --resource-group rg-observace \
+            --query "{nome:name,imagem:properties.template.containers[0].image}" \
+            --output json
